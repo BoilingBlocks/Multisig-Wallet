@@ -14,10 +14,9 @@ import {
   readContract,
   readContracts,
 } from "@wagmi/core";
-import { FACTORY_ABI, LOCAL_CONTRACT_ADDRESS } from "./constants";
+import { FACTORY_ABI } from "./constants";
 import { CreateWalletModal } from "./CreateWalletModal";
-
-const ADDRESS = LOCAL_CONTRACT_ADDRESS;
+import { CONTRACT_ADDRESS } from "./config";
 
 const setupClient = () => {
   const { chains, publicClient, webSocketPublicClient } = configureChains([hardhat], [publicProvider()]);
@@ -45,7 +44,7 @@ const getWallets = async (account: `0x${string}` | undefined) => {
     return [];
   }
 
-  const factoryContract = { address: ADDRESS as `0x${string}`, abi: FACTORY_ABI };
+  const factoryContract = { address: CONTRACT_ADDRESS as `0x${string}`, abi: FACTORY_ABI };
   const walletsCount = await readContract({
     ...factoryContract,
     functionName: "walletsCount",
@@ -64,9 +63,15 @@ const getWallets = async (account: `0x${string}` | undefined) => {
 
   const wallets = await readContracts({ contracts: batchedReadCalls });
 
-  console.log(wallets);
+  return wallets
+    .map((el) => {
+      if (typeof el.result === "string") {
+        return el.result;
+      }
 
-  return wallets;
+      return;
+    })
+    .reverse();
 };
 
 const App: Component = () => {
@@ -83,24 +88,77 @@ const App: Component = () => {
         chainId: chains[0].id,
       });
       setAccount(result.account);
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreateWallet = (newWalletAddress: `0x${string}`) => {
+    mutate((prev) => {
+      if (prev === undefined) {
+        return prev;
+      }
+
+      return [newWalletAddress, ...prev];
+    });
+
+    refetch();
   };
 
   const [showCreateWalletModal, setShowCreateWalletModal] = createSignal(false);
+  const [showCreateTransactionModal, setShowCreateTransactionModal] = createSignal(false);
+  const [selectedWallet, setSelectedWallet] = createSignal<`0x${string}`>();
 
   return (
     <>
       {!account() && <AuthOverlay onConnectWallet={handleConnectWallet} />}
-      {showCreateWalletModal() && <CreateWalletModal onCancel={() => setShowCreateWalletModal(false)} />}
+      {showCreateWalletModal() && (
+        <CreateWalletModal close={() => setShowCreateWalletModal(false)} onCreate={handleCreateWallet} />
+      )}
       <div class={css({ md: { display: "flex", height: "90vh" }, width: "100%" })}>
         <Card title="Wallets">
-          <div class={css({ height: "100%", width: "100%", backgroundColor: "rose.100" })}>
-            {wallets.loading && <p class={css(styles)}>Loading...</p>}
-            <Show
-              when={!wallets.loading && wallets()?.length}
-              fallback={<p class={css(styles)}>No Multisig Wallets!</p>}
-            >
-              <For each={wallets()}>{(wallet) => <div>wallet</div>}</For>
+          <div class={css({ height: "100%", width: "100%", backgroundColor: "rose.100", overflow: "auto" })}>
+            {wallets.loading && wallets() === undefined && <p class={css(styles)}>Loading...</p>}
+            <Show when={wallets()?.length} fallback={<p class={css(styles)}>No Multisig Wallets!</p>}>
+              <ul>
+                <For each={wallets()}>
+                  {(wallet) => (
+                    <li
+                      class={css({
+                        height: "60px",
+                        width: "100%",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        color: "rose.600",
+                        _hover: {
+                          backgroundColor: "rose.200",
+                          color: "white",
+                        },
+                        borderColor: "rose.200",
+                        borderWidth: "thin",
+                      })}
+                      classList={{
+                        [css({ backgroundColor: "rose.600", color: "white" })]: wallet === selectedWallet(),
+                      }}
+                    >
+                      <button
+                        class={css({ height: "100%", width: "100%", cursor: "pointer", color: "inherit" })}
+                        onClick={() =>
+                          setSelectedWallet((prev) => {
+                            if (wallet === undefined) {
+                              return prev;
+                            }
+                            return wallet as `0x${string}`;
+                          })
+                        }
+                      >
+                        <span class={css({ color: "inherit" })}>{wallet}</span>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
             </Show>
           </div>
           <button class={css(createWalletStyles)} onClick={() => setShowCreateWalletModal(true)}>
@@ -108,6 +166,13 @@ const App: Component = () => {
           </button>
         </Card>
         <Card title="Transactions">
+          <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
+            <button class={css(createWalletStyles)} onClick={() => setShowCreateTransactionModal(true)}>
+              Create New
+            </button>
+          </div>
+        </Card>
+        <Card title="Owners">
           <div class={css({ height: "100%", backgroundColor: "rose.100" })}></div>
         </Card>
       </div>

@@ -6,6 +6,8 @@ import {MultiSigWallet} from "./MultiSigWallet.sol";
 error InvalidIndex();
 
 contract MultiSigWalletFactory {
+  event Create(address indexed wallet);
+
     mapping(address => MultiSigWallet[]) internal _ownerToMultiSigWallets;
     mapping(address => uint) public walletsCount;
 
@@ -25,6 +27,8 @@ contract MultiSigWalletFactory {
             _ownerToMultiSigWallets[_owners[i]].push(multiSigWallet);
             walletsCount[_owners[i]] += 1;
         }
+
+        emit Create(address(multiSigWallet));
     }
 
     function getWallet(uint _index) external view validIndex(_index) returns (address) {

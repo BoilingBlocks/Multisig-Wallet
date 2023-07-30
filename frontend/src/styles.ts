@@ -8,6 +8,8 @@ export const styles = {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 10000,
+    backgroundColor: "rose.50",
   }),
   modalContent: css({
     boxShadow: "0px 6px 18px rgba(0, 0, 0, 0.2)",
@@ -72,6 +74,7 @@ export const styles = {
       _active: {
         transform: "translateY(0px)",
       },
+      cursor: "not-allowed",
     },
   }),
   requiredSigs: css({ display: "flex", flexDirection: "column", alignItems: "center" }),
@@ -118,6 +121,7 @@ export const styles = {
       _active: {
         transform: "translateY(0px)",
       },
+      cursor: "not-allowed",
     },
   }),
 } as const;

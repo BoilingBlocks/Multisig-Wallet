@@ -1,15 +1,19 @@
 import { Component, Show, createSignal, JSX, For } from "solid-js";
 import { styles } from "./styles";
 import { css } from "../styled-system/css";
-import { isAddress } from "viem";
+import { isAddress, trim } from "viem";
 import { FaRegularTrashCan } from "solid-icons/fa";
+import { waitForTransaction, writeContract } from "@wagmi/core";
+import { CONTRACT_ADDRESS } from "./config";
+import { FACTORY_ABI } from "./constants";
 
 type Props = {
-  onCancel: () => void;
+  close: () => void;
+  onCreate: (newWalletAddress: `0x${string}`) => void;
 };
 
 export const CreateWalletModal: Component<Props> = (props) => {
-  const [owners, setOwners] = createSignal<string[]>([]);
+  const [owners, setOwners] = createSignal<`0x${string}`[]>([]);
   const [disabled, setDisabled] = createSignal(true);
   const [requiredSigs, setRequiredSigs] = createSignal<string>("1");
   const [isDuplicate, setIsDuplicate] = createSignal(false);
@@ -55,17 +59,13 @@ export const CreateWalletModal: Component<Props> = (props) => {
 
     setOwners((prev) => {
       if (ownerInputRef !== undefined) {
-        return [...prev, ownerInputRef.value.trim()];
+        return [...prev, ownerInputRef.value.trim() as `0x${string}`];
       }
       return [...prev];
     });
 
     if (ownerInputRef !== undefined) {
       ownerInputRef.value = "";
-    }
-
-    if (ownersListRef !== undefined) {
-      ownersListRef.scrollTop = ownersListRef.scrollHeight;
     }
 
     if (Number(requiredSigs()) < 1) {
@@ -114,8 +114,26 @@ export const CreateWalletModal: Component<Props> = (props) => {
       setOwners((prev) => prev.filter((el) => el !== owner));
     };
 
+  const handleCreateWallet: JSX.EventHandler<HTMLButtonElement, MouseEvent> = async () => {
+    try {
+      const result = await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: FACTORY_ABI,
+        functionName: "create",
+        args: [owners(), BigInt(requiredSigs())],
+      });
+
+      const data = await waitForTransaction(result);
+      const walletAddress = trim(data.logs[0].topics[1]!);
+
+      props.onCreate(walletAddress);
+      props.close();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   let ownerInputRef: HTMLInputElement | undefined;
-  let ownersListRef: HTMLUListElement | undefined;
 
   return (
     <div class={styles.modalContainer}>
@@ -129,7 +147,7 @@ export const CreateWalletModal: Component<Props> = (props) => {
               </h3>
             </Show>
             <Show when={owners().length} fallback={<h3 class={styles.ownersNoneText}>None!</h3>}>
-              <ul class={styles.ownersListContainer} ref={ownersListRef}>
+              <ul class={styles.ownersListContainer}>
                 <For each={owners()}>
                   {(owner) => (
                     <li
@@ -195,10 +213,14 @@ export const CreateWalletModal: Component<Props> = (props) => {
           </div>
         </div>
         <div class={styles.modalActionButtonsContainer}>
-          <button class={styles.modalCancelButton} onClick={props.onCancel}>
+          <button class={styles.modalCancelButton} onClick={props.close}>
             Cancel
           </button>
-          <button class={styles.modalCreateWalletButton} disabled={Boolean(owners().length === 0)}>
+          <button
+            onClick={handleCreateWallet}
+            class={styles.modalCreateWalletButton}
+            disabled={Boolean(owners().length === 0)}
+          >
             Create Wallet
           </button>
         </div>

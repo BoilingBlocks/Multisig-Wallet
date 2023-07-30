@@ -8,6 +8,19 @@ export const FACTORY_ABI = [
     type: "error",
   },
   {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "wallet",
+        type: "address",
+      },
+    ],
+    name: "Create",
+    type: "event",
+  },
+  {
     inputs: [
       {
         internalType: "address[]",
