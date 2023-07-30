@@ -3,4 +3,11 @@
 html,
 body {
   background-color: var(--colors-rose-50);
+  width: "100%";
+  height: "100%";
+}
+
+#root {
+  width: "100%";
+  height: "100%";
 }
