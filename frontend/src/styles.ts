@@ -40,9 +40,16 @@ export const styles = {
     overflow: "auto",
     background: "rose.200",
     borderRadius: "md",
+    fontSize: "xs",
   }),
   addOwners: css({ display: "flex", justifyContent: "center" }),
-  addOwnersInput: css({ borderRadius: "md", borderWidth: "2px", borderColor: "rose.300" }),
+  addOwnersInput: css({
+    borderRadius: "md",
+    borderWidth: "2px",
+    borderColor: "rose.300",
+    fontSize: "xs",
+    padding: "2",
+  }),
   addOwnersButton: css({
     color: "white",
     backgroundColor: "rose.300",

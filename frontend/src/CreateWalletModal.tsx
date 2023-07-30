@@ -1,6 +1,8 @@
-import { Component, Show, createSignal, JSX, Index } from "solid-js";
+import { Component, Show, createSignal, JSX, For } from "solid-js";
 import { styles } from "./styles";
 import { css } from "../styled-system/css";
+import { isAddress } from "viem";
+import { FaRegularTrashCan } from "solid-icons/fa";
 
 type Props = {
   onCancel: () => void;
@@ -10,15 +12,42 @@ export const CreateWalletModal: Component<Props> = (props) => {
   const [owners, setOwners] = createSignal<string[]>([]);
   const [disabled, setDisabled] = createSignal(true);
   const [requiredSigs, setRequiredSigs] = createSignal<string>("1");
+  const [isDuplicate, setIsDuplicate] = createSignal(false);
+  const [invalidAddress, setInvalidAddress] = createSignal(false);
+
   const sigInputVisible = () => owners().length > 0;
 
   const handleOwnerInput = (e: InputEvent & { target: HTMLInputElement; currentTarget: HTMLInputElement }) => {
-    if (e.target.value.trim() === "") {
-      setDisabled(true);
-      return;
-    }
+    const trimmedInput = e.target.value.trim().toLowerCase();
+    const isDuplicate = owners().some((owner) => owner.toLowerCase() === trimmedInput);
+    switch (true) {
+      case isAddress(trimmedInput) && isDuplicate:
+        setDisabled(true);
+        setInvalidAddress(false);
+        setIsDuplicate(true);
+        break;
 
-    setDisabled(false);
+      case isAddress(trimmedInput) && !isDuplicate:
+        setDisabled(false);
+        setInvalidAddress(false);
+        setIsDuplicate(false);
+        break;
+
+      case !isAddress(trimmedInput) && !isDuplicate:
+        setDisabled(true);
+        setIsDuplicate(false);
+        break;
+
+      case !isAddress(trimmedInput):
+        setDisabled(true);
+        break;
+
+      case isDuplicate:
+        setDisabled(true);
+        setInvalidAddress(false);
+        setIsDuplicate(true);
+        break;
+    }
   };
 
   const handleAddOwner: JSX.EventHandler<HTMLFormElement, SubmitEvent> = (e) => {
@@ -26,7 +55,7 @@ export const CreateWalletModal: Component<Props> = (props) => {
 
     setOwners((prev) => {
       if (ownerInputRef !== undefined) {
-        return [...prev, ownerInputRef.value];
+        return [...prev, ownerInputRef.value.trim()];
       }
       return [...prev];
     });
@@ -38,7 +67,52 @@ export const CreateWalletModal: Component<Props> = (props) => {
     if (ownersListRef !== undefined) {
       ownersListRef.scrollTop = ownersListRef.scrollHeight;
     }
+
+    if (Number(requiredSigs()) < 1) {
+      setRequiredSigs("1");
+    }
+
+    setDisabled(true);
   };
+
+  const handleOwnerInputBlur: JSX.EventHandler<HTMLInputElement, FocusEvent> = () => {
+    if (ownerInputRef === undefined) {
+      return;
+    }
+
+    const trimmedInput = ownerInputRef.value.trim().toLowerCase();
+    const isDuplicate = owners().some((owner) => owner.toLowerCase() === trimmedInput);
+
+    if (trimmedInput === "") {
+      setInvalidAddress(false);
+      setIsDuplicate(false);
+      return;
+    }
+
+    if (!isAddress(trimmedInput)) {
+      setInvalidAddress(true);
+      return;
+    }
+
+    if (isDuplicate) {
+      setIsDuplicate(true);
+      return;
+    }
+  };
+
+  const handleDeleteOwner =
+    (owner: string): JSX.EventHandler<HTMLButtonElement, MouseEvent> =>
+    () => {
+      if (ownerInputRef === undefined) {
+        return;
+      }
+
+      if (Number(requiredSigs()) === owners().length) {
+        setRequiredSigs((prev) => `${Number(prev) - 1}`);
+      }
+
+      setOwners((prev) => prev.filter((el) => el !== owner));
+    };
 
   let ownerInputRef: HTMLInputElement | undefined;
   let ownersListRef: HTMLUListElement | undefined;
@@ -56,14 +130,39 @@ export const CreateWalletModal: Component<Props> = (props) => {
             </Show>
             <Show when={owners().length} fallback={<h3 class={styles.ownersNoneText}>None!</h3>}>
               <ul class={styles.ownersListContainer} ref={ownersListRef}>
-                <Index each={owners()}>
-                  {(owner) => <li class={css({ color: "rose.600", fontWeight: "bold" })}>{owner()}</li>}
-                </Index>
+                <For each={owners()}>
+                  {(owner) => (
+                    <li
+                      class={css({
+                        color: "rose.600",
+                        fontWeight: "bold",
+                        display: "flex",
+                        justifyContent: "space-around",
+                        alignItems: "center",
+                      })}
+                    >
+                      {owner}
+                      <button class={css({ cursor: "pointer" })} onClick={handleDeleteOwner(owner)}>
+                        <FaRegularTrashCan />
+                      </button>
+                    </li>
+                  )}
+                </For>
               </ul>
             </Show>
           </div>
           <div class={styles.addOwners}>
-            <form onSubmit={handleAddOwner}>
+            <form onSubmit={handleAddOwner} class={css({ position: "relative" })}>
+              {isDuplicate() && (
+                <span class={css({ color: "rose.400", fontSize: "xs", position: "absolute", top: "-5" })}>
+                  Duplicate owner not allowed
+                </span>
+              )}
+              {invalidAddress() && (
+                <span class={css({ color: "rose.400", fontSize: "xs", position: "absolute", top: "-5" })}>
+                  Invalid address
+                </span>
+              )}
               <input
                 ref={ownerInputRef}
                 id="ownerInput"
@@ -71,6 +170,7 @@ export const CreateWalletModal: Component<Props> = (props) => {
                 placeholder="Multisig owner address"
                 class={styles.addOwnersInput}
                 onInput={handleOwnerInput}
+                onBlur={handleOwnerInputBlur}
               />
               <button type="submit" class={styles.addOwnersButton} disabled={disabled()}>
                 Add Owner
