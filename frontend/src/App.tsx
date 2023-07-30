@@ -133,17 +133,22 @@ const App: Component = () => {
                         color: "rose.600",
                         _hover: {
                           backgroundColor: "rose.200",
-                          color: "white",
                         },
                         borderColor: "rose.200",
                         borderWidth: "thin",
                       })}
                       classList={{
-                        [css({ backgroundColor: "rose.600", color: "white" })]: wallet === selectedWallet(),
+                        [css({ backgroundColor: { base: "rose.600", _hover: "rose.600" }, color: "white" })]:
+                          wallet === selectedWallet(),
                       }}
                     >
                       <button
-                        class={css({ height: "100%", width: "100%", cursor: "pointer", color: "inherit" })}
+                        class={css({
+                          height: "100%",
+                          width: "100%",
+                          cursor: "pointer",
+                          color: "inherit",
+                        })}
                         onClick={() =>
                           setSelectedWallet((prev) => {
                             if (wallet === undefined) {
@@ -167,12 +172,14 @@ const App: Component = () => {
         </Card>
         <Card title="Transactions">
           <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
+            {/* TODO: <div> ... getWallet(index) ... loading ... getTransactions ... */}
             <button class={css(createWalletStyles)} onClick={() => setShowCreateTransactionModal(true)}>
               Create New
             </button>
           </div>
         </Card>
         <Card title="Owners">
+          {/* TODO: <div> ... getOwners ... loading */}
           <div class={css({ height: "100%", backgroundColor: "rose.100" })}></div>
         </Card>
       </div>

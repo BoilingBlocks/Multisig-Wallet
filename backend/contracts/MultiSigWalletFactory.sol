@@ -6,7 +6,7 @@ import {MultiSigWallet} from "./MultiSigWallet.sol";
 error InvalidIndex();
 
 contract MultiSigWalletFactory {
-  event Create(address indexed wallet);
+    event Create(address indexed wallet);
 
     mapping(address => MultiSigWallet[]) internal _ownerToMultiSigWallets;
     mapping(address => uint) public walletsCount;
