@@ -1,19 +1,20 @@
-import { Component, Show, createSignal, JSX, For } from "solid-js";
+import { Component, Show, createSignal, JSX, For, Switch, Match } from "solid-js";
 import { styles } from "./styles";
 import { css } from "../styled-system/css";
 import { isAddress, trim } from "viem";
 import { FaRegularTrashCan } from "solid-icons/fa";
-import { waitForTransaction, writeContract } from "@wagmi/core";
+import { getAccount, waitForTransaction, writeContract } from "@wagmi/core";
 import { CONTRACT_ADDRESS } from "./config";
 import { FACTORY_ABI } from "./constants";
+import toast from "solid-toast";
 
 type Props = {
   close: () => void;
-  onCreate: (newWalletAddress: `0x${string}`) => void;
+  onCreate: (newWalletAddress: `0x${string}`, owners: `0x${string}`[]) => void;
 };
 
 export const CreateWalletModal: Component<Props> = (props) => {
-  const [owners, setOwners] = createSignal<`0x${string}`[]>([]);
+  const [owners, setOwners] = createSignal<`0x${string}`[]>([getAccount().address!]);
   const [disabled, setDisabled] = createSignal(true);
   const [requiredSigs, setRequiredSigs] = createSignal<string>("1");
   const [isDuplicate, setIsDuplicate] = createSignal(false);
@@ -126,10 +127,26 @@ export const CreateWalletModal: Component<Props> = (props) => {
       const data = await waitForTransaction(result);
       const walletAddress = trim(data.logs[0].topics[1]!);
 
-      props.onCreate(walletAddress);
+      props.onCreate(walletAddress, owners());
       props.close();
+      toast.success(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "#065f46" })}>Multisig Wallet Created!</p>
+          <p class={css({ color: "#065f46", fontSize: "xs" })}>{walletAddress}</p>
+        </div>,
+        { style: { background: "#d1fae5" } }
+      );
     } catch (e) {
-      console.error(e);
+      // toast
     }
   };
 
@@ -155,14 +172,18 @@ export const CreateWalletModal: Component<Props> = (props) => {
                         color: "rose.600",
                         fontWeight: "bold",
                         display: "flex",
-                        justifyContent: "space-around",
+                        justifyContent: owner !== getAccount().address ? "space-between" : "space-between",
                         alignItems: "center",
                       })}
                     >
                       {owner}
-                      <button class={css({ cursor: "pointer" })} onClick={handleDeleteOwner(owner)}>
-                        <FaRegularTrashCan />
-                      </button>
+                      <Switch fallback={<p>(you)</p>}>
+                        <Match when={owner !== getAccount().address}>
+                          <button class={css({ cursor: "pointer" })} onClick={handleDeleteOwner(owner)}>
+                            <FaRegularTrashCan />
+                          </button>
+                        </Match>
+                      </Switch>
                     </li>
                   )}
                 </For>

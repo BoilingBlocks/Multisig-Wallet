@@ -4,6 +4,7 @@ pragma solidity 0.8.18;
 import {MultiSigWallet} from "./MultiSigWallet.sol";
 
 error InvalidIndex();
+error SenderNotAnOwner();
 
 contract MultiSigWalletFactory {
     event Create(address indexed wallet);
@@ -22,10 +23,19 @@ contract MultiSigWalletFactory {
     function create(address[] memory _owners, uint _required) external {
         MultiSigWallet multiSigWallet = new MultiSigWallet(_owners, _required);
         uint ownersLen = _owners.length;
+        bool msgSenderIsAnOwner;
 
         for (uint i; i < ownersLen; ++i) {
             _ownerToMultiSigWallets[_owners[i]].push(multiSigWallet);
             walletsCount[_owners[i]] += 1;
+
+            if(_owners[i] == msg.sender) {
+              msgSenderIsAnOwner = true;
+            }
+        }
+
+        if (!msgSenderIsAnOwner) {
+          revert SenderNotAnOwner();
         }
 
         emit Create(address(multiSigWallet));

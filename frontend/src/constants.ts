@@ -8,6 +8,11 @@ export const FACTORY_ABI = [
     type: "error",
   },
   {
+    inputs: [],
+    name: "SenderNotAnOwner",
+    type: "error",
+  },
+  {
     anonymous: false,
     inputs: [
       {
@@ -335,6 +340,19 @@ export const WALLET_ABI = [
         internalType: "address",
         name: "",
         type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "ownersCount",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
       },
     ],
     stateMutability: "view",

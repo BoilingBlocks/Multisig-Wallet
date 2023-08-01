@@ -19,6 +19,7 @@ import { FACTORY_ABI, WALLET_ABI } from "./constants";
 import { CreateWalletModal } from "./CreateWalletModal";
 import { CONTRACT_ADDRESS } from "./config";
 import { Spinner } from "./Spinner";
+import { CreateTransactionModal } from "./CreateTransactionModal";
 
 const setupClient = () => {
   const { chains, publicClient, webSocketPublicClient } = configureChains([hardhat], [publicProvider()]);
@@ -29,7 +30,7 @@ const setupClient = () => {
   });
 
   const [account, setAccount] = createSignal<`0x${string}`>();
-  watchAccount((account) => {
+  watchAccount(async (account) => {
     console.log(account);
     if (!account.isConnected) {
       setAccount(undefined);
@@ -43,45 +44,47 @@ const setupClient = () => {
 };
 
 const getWallets = async (account: `0x${string}` | undefined) => {
+  console.log("getting wallet for:", account);
   if (account === undefined) {
     return [];
   }
 
-  const factoryContract = { address: CONTRACT_ADDRESS as `0x${string}`, abi: FACTORY_ABI };
-  const walletsCount = await readContract({
-    ...factoryContract,
-    functionName: "walletsCount",
-    args: [account],
-  });
+  try {
+    const factoryContract = { address: CONTRACT_ADDRESS as `0x${string}`, abi: FACTORY_ABI };
+    const walletsCount = await readContract({
+      ...factoryContract,
+      functionName: "walletsCount",
+      args: [account],
+    });
 
-  if (Number(walletsCount) === 0) {
+    if (Number(walletsCount) === 0) {
+      return [];
+    }
+
+    const batchedReadCalls = new Array(Number(walletsCount)).fill(0).map((_, i) => ({
+      ...factoryContract,
+      functionName: "getWallet",
+      args: [i],
+    }));
+
+    const wallets = await readContracts({ contracts: batchedReadCalls });
+    console.log(wallets.filter((el) => typeof el.result === "string").reverse());
+
+    return wallets.filter((el) => typeof el.result === "string").reverse();
+  } catch (e) {
     return [];
   }
-
-  const batchedReadCalls = new Array(Number(walletsCount)).fill(0).map((_, i) => ({
-    ...factoryContract,
-    functionName: "getWallet",
-    args: [i],
-  }));
-
-  const wallets = await readContracts({ contracts: batchedReadCalls });
-
-  return wallets
-    .map((el) => {
-      if (typeof el.result === "string") {
-        return el.result;
-      }
-
-      return;
-    })
-    .reverse();
 };
 
 const getBalance = async (walletAddress: `0x${string}`) => {
   return await fetchBalance({ address: walletAddress });
 };
 
-const getTransactions = async (walletAddress: `0x${string}`) => {
+const getTransactions = async (walletAddress: `0x${string}` | undefined) => {
+  if (walletAddress === undefined) {
+    return [];
+  }
+
   const walletContract = { address: walletAddress, abi: WALLET_ABI };
 
   const transactionsCount = await readContract({
@@ -104,10 +107,41 @@ const getTransactions = async (walletAddress: `0x${string}`) => {
   return data.reverse();
 };
 
+const getOwners = async (walletAddress: `0x${string}` | undefined) => {
+  if (walletAddress === undefined) {
+    return [];
+  }
+
+  const walletContract = { address: walletAddress, abi: WALLET_ABI };
+
+  try {
+    const ownersCount = await readContract({
+      ...walletContract,
+      functionName: "ownersCount",
+    });
+
+    if (ownersCount < 1) {
+      return [];
+    }
+
+    const batchedReadCalls = new Array(Number(ownersCount)).fill(0).map((_, i) => ({
+      ...walletContract,
+      functionName: "owners",
+      args: [i],
+    }));
+
+    const data = await readContracts({ contracts: batchedReadCalls });
+
+    return data.filter((el) => el.status === "success").map((el) => el.result as `0x${string}`);
+  } catch (e) {
+    return [];
+  }
+};
+
 const App: Component = () => {
   const { account, setAccount, chains } = setupClient();
 
-  const [wallets, { mutate, refetch: refetchWallets }] = createResource(account, getWallets);
+  const [wallets, { mutate: mutateWallets, refetch: refetchWallets }] = createResource(account, getWallets);
 
   const handleConnectWallet = async () => {
     try {
@@ -123,14 +157,15 @@ const App: Component = () => {
     }
   };
 
-  const handleCreateWallet = (newWalletAddress: `0x${string}`) => {
-    mutate((prev) => {
-      if (prev === undefined) {
-        return prev;
-      }
+  const handleCreateWallet = (newWalletAddress: `0x${string}`, owners: `0x${string}`[]) => {
+    if (account() !== undefined && owners.map((el) => el.toLowerCase()).includes(account()!.toLowerCase()))
+      mutateWallets((prev) => {
+        if (prev === undefined) {
+          return [];
+        }
 
-      return [newWalletAddress, ...prev];
-    });
+        return [{ status: "success", result: newWalletAddress }, ...prev];
+      });
 
     refetchWallets();
   };
@@ -140,126 +175,247 @@ const App: Component = () => {
   const [selectedWallet, setSelectedWallet] = createSignal<`0x${string}`>();
 
   const [transactions] = createResource(selectedWallet, getTransactions);
+  const [owners] = createResource(selectedWallet, getOwners);
   const [balance, { refetch: refetchBalance, mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
 
   createEffect(() => {
     if (account()) {
+      setSelectedWallet(undefined);
       mutateBalance(undefined);
+      mutateWallets(undefined);
     }
+    // (() => console.log(wallets()))();
   });
+
+  // onMount(() => {
+  //   toast.success(
+  //     <div
+  //       class={css({
+  //         width: "100%",
+  //         height: "100%",
+  //         display: "flex",
+  //         flexDirection: "column",
+  //         justifyContent: "center",
+  //         alignItems: "flex-start",
+  //       })}
+  //     >
+  //       <p class={css({ color: "#065f46" })}>Multisig Wallet Created!</p>
+  //       <p class={css({ color: "#065f46" })}>0x23r23r23rf2-0fjawe-f0awgt4gawg</p>
+  //     </div>,
+  //     { style: { background: "#d1fae5" } }
+  //   );
+  // });
 
   return (
     <>
-      {showCreateWalletModal() && (
-        <CreateWalletModal close={() => setShowCreateWalletModal(false)} onCreate={handleCreateWallet} />
-      )}
-      <Show when={account()} fallback={<AuthOverlay onConnectWallet={handleConnectWallet} />}>
-        <div class={css({ lg: { display: "flex", height: "90vh" }, width: "100%" })}>
-          <Card title="Multisig Wallets">
-            <div class={css({ height: "100%", width: "100%", backgroundColor: "rose.100", overflow: "auto" })}>
-              {wallets.loading && wallets() === undefined && <p class={css(styles)}>Loading...</p>}
-              <Show when={wallets()?.length} fallback={<p class={css(styles)}>No Multisig Wallets!</p>}>
-                <ul>
-                  <For each={wallets()}>
-                    {(wallet) => (
-                      <li
+      <Switch>
+        <Match when={showCreateWalletModal()}>
+          <CreateWalletModal close={() => setShowCreateWalletModal(false)} onCreate={handleCreateWallet} />
+        </Match>
+        <Match when={showCreateTransactionModal()}>
+          <CreateTransactionModal close={() => setShowCreateTransactionModal(false)} />
+        </Match>
+        <Match when={true}>
+          <Show when={account()} fallback={<AuthOverlay onConnectWallet={handleConnectWallet} />}>
+            <div class={css({ lg: { display: "flex", height: "90vh" }, width: "100%" })}>
+              <Card title="Your Multisig Wallets">
+                <div class={css({ height: "100%", width: "100%", backgroundColor: "rose.100", overflow: "auto" })}>
+                  {wallets.loading && wallets() === undefined && (
+                    <div
+                      class={css({
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      })}
+                    >
+                      <Spinner />
+                    </div>
+                  )}
+                  <Show when={wallets()?.length} fallback={<p class={css(styles)}>No Multisig Wallets!</p>}>
+                    <ul>
+                      <For each={wallets()}>
+                        {(wallet) => (
+                          <li
+                            class={css({
+                              height: "60px",
+                              width: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              color: wallet !== undefined && wallet.result === selectedWallet() ? "white" : "rose.600",
+                              _hover: {
+                                backgroundColor: "rose.200",
+                              },
+                              borderColor: "rose.200",
+                              borderWidth: "thin",
+                              fontSize: { base: "sm", lg: "xs", xl: "sm", "2xl": "md" },
+                            })}
+                            classList={{
+                              [css({ backgroundColor: { base: "rose.600", _hover: "rose.600" }, color: "white" })]:
+                                wallet !== undefined && wallet.result === selectedWallet(),
+                            }}
+                          >
+                            <button
+                              class={css({
+                                height: "100%",
+                                width: "100%",
+                                cursor: "pointer",
+                                color: "inherit",
+                              })}
+                              onClick={() =>
+                                setSelectedWallet((prev) => {
+                                  if (wallet === undefined) {
+                                    return prev;
+                                  }
+                                  return wallet.result as `0x${string}`;
+                                })
+                              }
+                            >
+                              <span class={css({ color: "inherit" })}>{wallet.result as `0x${string}`}</span>
+                            </button>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
+                </div>
+                <Switch>
+                  <Match when={account() !== undefined && !wallets.loading}>
+                    <button class={css(createWalletStyles)} onClick={() => setShowCreateWalletModal(true)}>
+                      + New Wallet
+                    </button>
+                  </Match>
+                </Switch>
+              </Card>
+              <div class={css({ display: "flex", flexDirection: "column", width: "100%" })}>
+                <div class={css({ width: "100%", display: "flex", justifyContent: "center" })}>
+                  <Switch
+                    fallback={<Card title={`Balance: ---`} height="initial" width="100%" lg={{ width: "100%" }} />}
+                  >
+                    <Match when={balance.loading}>
+                      <Card title={`Balance: loading...`} height="initial" width="100%" lg={{ width: "100%" }} />
+                    </Match>
+                    <Match when={balance()}>
+                      <Card
+                        title={`Balance: ${balance()!.value}ETH`}
+                        height="initial"
+                        width="100%"
+                        lg={{ width: "100%" }}
+                      />
+                    </Match>
+                  </Switch>
+                </div>
+                <div class={css({ height: "100%", display: "flex", flexDirection: { base: "column", lg: "row" } })}>
+                  <Card title="Transactions">
+                    <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
+                      <div
                         class={css({
-                          height: "60px",
                           width: "100%",
+                          height: "100%",
                           display: "flex",
                           justifyContent: "center",
                           alignItems: "center",
-                          color: "rose.600",
-                          _hover: {
-                            backgroundColor: "rose.200",
-                          },
-                          borderColor: "rose.200",
-                          borderWidth: "thin",
                         })}
-                        classList={{
-                          [css({ backgroundColor: { base: "rose.600", _hover: "rose.600" }, color: "white" })]:
-                            wallet === selectedWallet(),
-                        }}
                       >
-                        <button
-                          class={css({
-                            height: "100%",
-                            width: "100%",
-                            cursor: "pointer",
-                            color: "inherit",
-                          })}
-                          onClick={() =>
-                            setSelectedWallet((prev) => {
-                              if (wallet === undefined) {
-                                return prev;
-                              }
-                              return wallet as `0x${string}`;
-                            })
-                          }
-                        >
-                          <span class={css({ color: "inherit" })}>{wallet}</span>
+                        <Switch>
+                          <Match when={wallets() === undefined && wallets.loading}>
+                            <Spinner />
+                          </Match>
+                          <Match when={wallets()?.length === 0}>
+                            <p class={css(styles)}>Create a wallet to get started.</p>
+                          </Match>
+                          <Match when={wallets()?.length && selectedWallet() === undefined}>
+                            <p class={css(styles)}>Select a wallet</p>
+                          </Match>
+                          <Match when={transactions.loading}>
+                            <Spinner />
+                          </Match>
+                          <Match when={!transactions.loading && transactions.length}>
+                            <For each={transactions()}>{(transaction) => <p>{JSON.stringify(transaction)}</p>}</For>
+                          </Match>
+                          <Match when={transactions.length === 0}>
+                            <p class={css(styles)}>No transactions</p>
+                          </Match>
+                        </Switch>
+                      </div>
+                      {selectedWallet() && (
+                        <button class={css(createWalletStyles)} onClick={() => setShowCreateTransactionModal(true)}>
+                          + New Transaction
                         </button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Show>
-            </div>
-            <button class={css(createWalletStyles)} onClick={() => setShowCreateWalletModal(true)}>
-              + New Wallet
-            </button>
-          </Card>
-          <div class={css({ display: "flex", flexDirection: "column", width: "100%" })}>
-            <div class={css({ width: "100%", display: "flex", justifyContent: "center" })}>
-              <Switch fallback={<Card title={`Balance: ---`} height="initial" width="100%" lg={{ width: "100%" }} />}>
-                <Match when={balance.loading}>
-                  <Card title={`Balance: loading...`} height="initial" width="100%" lg={{ width: "100%" }} />
-                </Match>
-                <Match when={balance()}>
+                      )}
+                    </div>
+                  </Card>
                   <Card
-                    title={`Balance: ${balance()!.value}ETH`}
-                    height="initial"
-                    width="100%"
-                    lg={{ width: "100%" }}
-                  />
-                </Match>
-              </Switch>
-            </div>
-            <div class={css({ height: "100%", display: "flex", flexDirection: { base: "column", lg: "row" } })}>
-              <Card title="Transactions">
-                <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
-                  <div
-                    class={css({
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                    })}
+                    title={
+                      owners() === undefined
+                        ? "Owners"
+                        : owners()?.length === 1
+                        ? "(1) Owner"
+                        : `(${owners()?.length}) Owners`
+                    }
                   >
-                    <Switch fallback={<p class={css(styles)}>No transactions</p>}>
-                      <Match when={transactions.loading}>
-                        {/* <Match when={true}> */}
-                        <Spinner />
-                      </Match>
-                      <Match when={!transactions.loading && transactions.length}>
-                        <For each={transactions()}>{(transaction) => <p>{JSON.stringify(transaction)}</p>}</For>
-                      </Match>
-                    </Switch>
-                  </div>
-                  <button class={css(createWalletStyles)} onClick={() => setShowCreateTransactionModal(true)}>
-                    + New Transaction
-                  </button>
+                    <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
+                      <Switch>
+                        <Match when={(wallets() === undefined && wallets.loading) || owners.loading}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
+                            <Spinner />
+                          </div>
+                        </Match>
+                        <Match when={selectedWallet() === undefined}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
+                            <p class={css(styles)}>N/A</p>
+                          </div>
+                        </Match>
+                        <Match when={owners()?.length}>
+                          <ul>
+                            <For each={owners()}>
+                              {(owner) => (
+                                <li
+                                  class={css({
+                                    height: "60px",
+                                    width: "100%",
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                    color: "rose.600",
+                                    borderColor: "rose.200",
+                                    borderWidth: "thin",
+                                    fontSize: { base: "sm", lg: "xs", xl: "sm", "2xl": "md" },
+                                  })}
+                                >
+                                  {owner}
+                                </li>
+                              )}
+                            </For>
+                          </ul>
+                        </Match>
+                      </Switch>
+                    </div>
+                  </Card>
                 </div>
-              </Card>
-              <Card title="Owners">
-                {/* TODO: <div> ... getOwners ... loading */}
-                <div class={css({ height: "100%", backgroundColor: "rose.100" })}></div>
-              </Card>
+              </div>
             </div>
-          </div>
-        </div>
-      </Show>
+          </Show>
+        </Match>
+      </Switch>
     </>
   );
 };

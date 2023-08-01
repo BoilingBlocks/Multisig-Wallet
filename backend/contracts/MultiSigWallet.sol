@@ -147,4 +147,8 @@ contract MultiSigWallet {
     function transactionsCount() external view returns (uint) {
         return transactions.length;
     }
+
+    function ownersCount() external view returns (uint) {
+      return owners.length;
+    }
 }
