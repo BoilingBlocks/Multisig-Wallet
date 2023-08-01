@@ -143,4 +143,8 @@ contract MultiSigWallet {
 
         emit Revoke(msg.sender, _txId);
     }
+
+    function transactionsCount() external view returns (uint) {
+        return transactions.length;
+    }
 }

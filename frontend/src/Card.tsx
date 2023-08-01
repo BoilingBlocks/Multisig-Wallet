@@ -1,9 +1,13 @@
 import { ParentComponent, children } from "solid-js";
 import { css } from "../styled-system/css";
 import { CARD_TITLE_HEIGHT } from "./constants";
+import { SystemStyleObject } from "../styled-system/types";
 
 type Props = {
   title: string;
+  height?: SystemStyleObject["height"];
+  width?: SystemStyleObject["width"];
+  lg?: SystemStyleObject["lg"];
 };
 
 export const Card: ParentComponent<Props> = (props) => {
@@ -18,10 +22,11 @@ export const Card: ParentComponent<Props> = (props) => {
         borderRadius: "lg",
         borderColor: "rose.200",
         borderWidth: "medium",
-        height: { base: "md", md: "100%" },
-        md: { width: "50%" },
+        height: props.height ?? { base: "md", lg: "100%" },
+        lg: props.lg ?? { width: "50%" },
         overflow: "auto",
         position: "relative",
+        width: props.width,
       })}
     >
       <h1
