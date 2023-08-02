@@ -20,6 +20,7 @@ import { CreateWalletModal } from "./CreateWalletModal";
 import { CONTRACT_ADDRESS } from "./config";
 import { Spinner } from "./Spinner";
 import { CreateTransactionModal } from "./CreateTransactionModal";
+import { bytesToString, hexToString } from "viem";
 
 const setupClient = () => {
   const { chains, publicClient, webSocketPublicClient } = configureChains([hardhat], [publicProvider()]);
@@ -103,8 +104,9 @@ const getTransactions = async (walletAddress: `0x${string}` | undefined) => {
   }));
 
   const data = await readContracts({ contracts: batchedReadCalls });
+  const tx = data.filter((el) => el.status === "success"); // Assuming all will succeed. Don't do this at home.
 
-  return data.reverse();
+  return tx.map((el) => el.result as [`0x${string}`, BigInt, `0x${string}`, boolean]).reverse();
 };
 
 const getOwners = async (walletAddress: `0x${string}` | undefined) => {
@@ -170,13 +172,27 @@ const App: Component = () => {
     refetchWallets();
   };
 
+  const handleCreateTransaction = (to: `0x${string}`, value: BigInt, data: `0x${string}`) => {
+    mutateTransactions((prev) => {
+      if (prev === undefined) {
+        return [[to, value, data, false]];
+      }
+      return [[to, value, data, false], ...prev];
+    });
+
+    refetchTransactions();
+  };
+
   const [showCreateWalletModal, setShowCreateWalletModal] = createSignal(false);
   const [showCreateTransactionModal, setShowCreateTransactionModal] = createSignal(false);
   const [selectedWallet, setSelectedWallet] = createSignal<`0x${string}`>();
 
-  const [transactions] = createResource(selectedWallet, getTransactions);
+  const [transactions, { refetch: refetchTransactions, mutate: mutateTransactions }] = createResource(
+    selectedWallet,
+    getTransactions
+  );
   const [owners] = createResource(selectedWallet, getOwners);
-  const [balance, { refetch: refetchBalance, mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
+  const [balance, { /* refetch: refetchBalance,*/ mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
 
   createEffect(() => {
     if (account()) {
@@ -184,7 +200,6 @@ const App: Component = () => {
       mutateBalance(undefined);
       mutateWallets(undefined);
     }
-    // (() => console.log(wallets()))();
   });
 
   // onMount(() => {
@@ -213,7 +228,11 @@ const App: Component = () => {
           <CreateWalletModal close={() => setShowCreateWalletModal(false)} onCreate={handleCreateWallet} />
         </Match>
         <Match when={showCreateTransactionModal()}>
-          <CreateTransactionModal close={() => setShowCreateTransactionModal(false)} />
+          <CreateTransactionModal
+            close={() => setShowCreateTransactionModal(false)}
+            wallet={selectedWallet()!}
+            onCreate={handleCreateTransaction}
+          />
         </Match>
         <Match when={true}>
           <Show when={account()} fallback={<AuthOverlay onConnectWallet={handleConnectWallet} />}>
@@ -310,42 +329,97 @@ const App: Component = () => {
                 <div class={css({ height: "100%", display: "flex", flexDirection: { base: "column", lg: "row" } })}>
                   <Card title="Transactions">
                     <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
-                      <div
-                        class={css({
-                          width: "100%",
-                          height: "100%",
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
-                        })}
-                      >
-                        <Switch>
-                          <Match when={wallets() === undefined && wallets.loading}>
+                      <Switch>
+                        <Match when={wallets() === undefined && wallets.loading}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
                             <Spinner />
-                          </Match>
-                          <Match when={wallets()?.length === 0}>
+                          </div>
+                        </Match>
+                        <Match when={wallets()?.length === 0}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
                             <p class={css(styles)}>Create a wallet to get started.</p>
-                          </Match>
-                          <Match when={wallets()?.length && selectedWallet() === undefined}>
+                          </div>
+                        </Match>
+                        <Match when={wallets()?.length && selectedWallet() === undefined}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
                             <p class={css(styles)}>Select a wallet</p>
-                          </Match>
-                          <Match when={transactions.loading}>
+                          </div>
+                        </Match>
+                        <Match when={transactions.loading}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
                             <Spinner />
-                          </Match>
-                          <Match when={!transactions.loading && transactions.length}>
-                            <For each={transactions()}>{(transaction) => <p>{JSON.stringify(transaction)}</p>}</For>
-                          </Match>
-                          <Match when={transactions.length === 0}>
+                          </div>
+                        </Match>
+                        <Match when={!transactions.loading && transactions()?.length}>
+                          <For each={transactions()}>
+                            {(transaction) => (
+                              <li
+                                class={css({
+                                  height: "100px",
+                                  width: "100%",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                })}
+                              >
+                                <p>TO: {transaction[0]}</p>
+                                <p>VALUE: {transaction[1].toString()}</p>
+                                <p>DATA: "{hexToString(transaction[2])}"</p>
+                              </li>
+                            )}
+                          </For>
+                        </Match>
+                        <Match when={transactions()?.length === 0}>
+                          <div
+                            class={css({
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            })}
+                          >
                             <p class={css(styles)}>No transactions</p>
-                          </Match>
-                        </Switch>
-                      </div>
-                      {selectedWallet() && (
-                        <button class={css(createWalletStyles)} onClick={() => setShowCreateTransactionModal(true)}>
-                          + New Transaction
-                        </button>
-                      )}
+                          </div>
+                        </Match>
+                      </Switch>
                     </div>
+                    {selectedWallet() && (
+                      <button class={css(createWalletStyles)} onClick={() => setShowCreateTransactionModal(true)}>
+                        + New Transaction
+                      </button>
+                    )}
                   </Card>
                   <Card
                     title={
