@@ -33,7 +33,7 @@ export const AuthOverlay: Component<Props> = (props) => {
           borderWidth: "thin",
           borderColor: "rose.600",
           boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.4)",
-          transition: "all 0.3s ease 0s",
+          transition: "all 0.15s ease 0s",
           _hover: {
             backgroundColor: "rose.500",
           },

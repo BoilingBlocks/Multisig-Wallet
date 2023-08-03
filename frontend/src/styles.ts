@@ -59,7 +59,7 @@ export const styles = {
     padding: "2",
     cursor: "pointer",
     boxShadow: "0px 2px 6px rgba(0, 0, 0, 0.2)",
-    transition: "all 0.3s ease 0s",
+    transition: "all 0.15s ease 0s",
     _hover: {
       backgroundColor: "rose.500",
     },
@@ -93,7 +93,7 @@ export const styles = {
     _hover: {
       backgroundColor: "white",
     },
-    transition: "all 0.3s ease 0s",
+    transition: "all 0.15s ease 0s",
     _active: {
       transform: "translateY(4px)",
     },
@@ -106,7 +106,7 @@ export const styles = {
     borderRadius: "lg",
     cursor: "pointer",
     boxShadow: "0px 2px 6px rgba(0, 0, 0, 0.2)",
-    transition: "all 0.3s ease 0s",
+    transition: "all 0.15s ease 0s",
     _hover: {
       backgroundColor: "rose.500",
     },

@@ -20,7 +20,8 @@ import { CreateWalletModal } from "./CreateWalletModal";
 import { CONTRACT_ADDRESS } from "./config";
 import { Spinner } from "./Spinner";
 import { CreateTransactionModal } from "./CreateTransactionModal";
-import { bytesToString, hexToString } from "viem";
+import { hexToString } from "viem";
+import { SystemStyleObject } from "../styled-system/types";
 
 const setupClient = () => {
   const { chains, publicClient, webSocketPublicClient } = configureChains([hardhat], [publicProvider()]);
@@ -240,15 +241,7 @@ const App: Component = () => {
               <Card title="Your Multisig Wallets">
                 <div class={css({ height: "100%", width: "100%", backgroundColor: "rose.100", overflow: "auto" })}>
                   {wallets.loading && wallets() === undefined && (
-                    <div
-                      class={css({
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      })}
-                    >
+                    <div class={css(centerStuff)}>
                       <Spinner />
                     </div>
                   )}
@@ -272,15 +265,17 @@ const App: Component = () => {
                               fontSize: { base: "sm", lg: "xs", xl: "sm", "2xl": "md" },
                             })}
                             classList={{
-                              [css({ backgroundColor: { base: "rose.600", _hover: "rose.600" }, color: "white" })]:
-                                wallet !== undefined && wallet.result === selectedWallet(),
+                              [css({
+                                backgroundColor: { base: "rose.600", _hover: "rose.600" },
+                                color: "white",
+                              })]: wallet !== undefined && wallet.result === selectedWallet(),
                             }}
                           >
                             <button
                               class={css({
                                 height: "100%",
                                 width: "100%",
-                                cursor: "pointer",
+                                cursor: wallet.result !== selectedWallet() ? "pointer" : "initial",
                                 color: "inherit",
                               })}
                               onClick={() =>
@@ -328,88 +323,102 @@ const App: Component = () => {
                 </div>
                 <div class={css({ height: "100%", display: "flex", flexDirection: { base: "column", lg: "row" } })}>
                   <Card title="Transactions">
-                    <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
+                    <div class={css({ height: "100%", width: "100%", backgroundColor: "rose.100", overflow: "auto" })}>
                       <Switch>
                         <Match when={wallets() === undefined && wallets.loading}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <Spinner />
                           </div>
                         </Match>
                         <Match when={wallets()?.length === 0}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <p class={css(styles)}>Create a wallet to get started.</p>
                           </div>
                         </Match>
                         <Match when={wallets()?.length && selectedWallet() === undefined}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <p class={css(styles)}>Select a wallet</p>
                           </div>
                         </Match>
                         <Match when={transactions.loading}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <Spinner />
                           </div>
                         </Match>
                         <Match when={!transactions.loading && transactions()?.length}>
                           <For each={transactions()}>
-                            {(transaction) => (
+                            {(transaction, i) => (
                               <li
                                 class={css({
-                                  height: "100px",
+                                  height: "150px",
                                   width: "100%",
-                                  display: "flex",
-                                  flexDirection: "column",
+                                  listStyle: "none",
                                 })}
                               >
-                                <p>TO: {transaction[0]}</p>
-                                <p>VALUE: {transaction[1].toString()}</p>
-                                <p>DATA: "{hexToString(transaction[2])}"</p>
+                                <button
+                                  class={css({
+                                    width: "inherit",
+                                    height: "inherit",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-evenly",
+                                    flexDirection: "column",
+                                    borderBottomWidth: "medium",
+                                    borderBottomColor: "rose.200",
+                                    color: "rose.600",
+                                    fontSize: { base: "sm", lg: "xs", xl: "sm", "2xl": "md" },
+                                  })}
+                                  classList={{
+                                    [css({ borderTopColor: "rose.200", borderTopWidth: "medium" })]: i() === 0,
+                                  }}
+                                >
+                                  {/* 
+                                      executed: yes = green / no = yellow,
+                                      approvals: executed = green / not enough approvals = yellow / ready to execute = blue
+                                      to, 
+                                      value, 
+                                      data,
+                                  */}
+                                  <div class={css(txDetailRow)}>
+                                    <div class={css(txDetailLabel)}>
+                                      <p>EXECUTED</p>
+                                    </div>
+                                    <div class={css(txDetailInfo)}>
+                                      <p>{JSON.stringify(transaction[3])}</p>
+                                    </div>
+                                  </div>
+                                  <div class={css(txDetailRow)}>
+                                    <div class={css(txDetailLabel)}>
+                                      <p>TO</p>
+                                    </div>
+                                    <div
+                                      class={css({
+                                        ...txDetailInfo,
+                                        fontSize: { base: "xs", lg: "xx-small", xl: "xs", "2xl": "sm" },
+                                      })}
+                                    >
+                                      {transaction[0]}
+                                    </div>
+                                  </div>
+                                  <div class={css(txDetailRow)}>
+                                    <div class={css(txDetailLabel)}>
+                                      <p>VALUE</p>
+                                    </div>
+                                    <div class={css(txDetailInfo)}>{transaction[1].toString()}ETH</div>
+                                  </div>
+                                  <div class={css(txDetailRow)}>
+                                    <div class={css(txDetailLabel)}>
+                                      <p>DATA</p>
+                                    </div>
+                                    <div class={css(txDetailInfo)}>"{hexToString(transaction[2])}"</div>
+                                  </div>
+                                </button>
                               </li>
                             )}
                           </For>
                         </Match>
                         <Match when={transactions()?.length === 0}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <p class={css(styles)}>No transactions</p>
                           </div>
                         </Match>
@@ -433,28 +442,12 @@ const App: Component = () => {
                     <div class={css({ height: "100%", backgroundColor: "rose.100" })}>
                       <Switch>
                         <Match when={(wallets() === undefined && wallets.loading) || owners.loading}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <Spinner />
                           </div>
                         </Match>
                         <Match when={selectedWallet() === undefined}>
-                          <div
-                            class={css({
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                            })}
-                          >
+                          <div class={css(centerStuff)}>
                             <p class={css(styles)}>N/A</p>
                           </div>
                         </Match>
@@ -496,7 +489,7 @@ const App: Component = () => {
 
 export default App;
 
-const styles = {
+const styles: SystemStyleObject = {
   height: "100%",
   width: "100%",
   display: "flex",
@@ -506,7 +499,7 @@ const styles = {
   color: "rose.800",
 };
 
-const createWalletStyles = {
+const createWalletStyles: SystemStyleObject = {
   position: "absolute",
   bottom: "3",
   right: "3",
@@ -519,7 +512,7 @@ const createWalletStyles = {
   borderWidth: "thin",
   borderColor: "rose.600",
   boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.2)",
-  transition: "all 0.3s ease 0s",
+  transition: "all 0.15s ease 0s",
   _hover: {
     backgroundColor: "rose.500",
   },
@@ -527,3 +520,32 @@ const createWalletStyles = {
     transform: "translateY(7px)",
   },
 } as const;
+
+const centerStuff: SystemStyleObject = {
+  width: "100%",
+  height: "100%",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+};
+
+const txDetailRow: SystemStyleObject = {
+  width: { base: "85%", mdToXl: "70%" },
+  maxWidth: "600px",
+  display: "flex",
+};
+
+const txDetailLabel: SystemStyleObject = {
+  width: "25%",
+  maxWidth: "240px",
+  display: "flex",
+  justifyContent: "flex-start",
+  alignItems: "center",
+};
+
+const txDetailInfo: SystemStyleObject = {
+  width: "75%",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+};
