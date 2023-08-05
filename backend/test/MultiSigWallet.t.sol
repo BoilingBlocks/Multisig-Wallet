@@ -123,12 +123,15 @@ contract MultiSigWalletTest is Test {
 
         vm.prank(address(1));
         multiSigWallet.submit(to, value, data);
-        (address _to, uint _value, bytes memory _data, bool executed) = multiSigWallet.transactions(0);
+        (address _to, uint _value, bytes memory _data, bool executed, uint approvedCount) = multiSigWallet.transactions(
+            0
+        );
 
         assertEq(to, _to);
         assertEq(value, _value);
         assertEq(data, _data);
         assertFalse(executed);
+        assertEq(approvedCount, 0);
     }
 
     function testApproveSuccessEmitsApproveEvent() public {
@@ -169,10 +172,12 @@ contract MultiSigWalletTest is Test {
 
         vm.startPrank(owner);
         multiSigWallet.submit(address(4), 1 ether, "");
-        assertEq(multiSigWallet.approvedCount(txId), 0);
+        (, , , , uint approvedCount) = multiSigWallet.transactions(txId);
+        assertEq(approvedCount, 0);
 
         multiSigWallet.approve(txId);
-        assertEq(multiSigWallet.approvedCount(txId), 1);
+        (, , , , uint approvedCount2) = multiSigWallet.transactions(txId);
+        assertEq(approvedCount2, 1);
     }
 
     function testApproveFailsIfNotOwner() public {
@@ -376,10 +381,12 @@ contract MultiSigWalletTest is Test {
         vm.startPrank(owner);
         multiSigWallet.submit(address(4), 1 ether, "");
         multiSigWallet.approve(txId);
-        assertEq(multiSigWallet.approvedCount(txId), 1);
+        (, , , , uint approvedCount) = multiSigWallet.transactions(txId);
+        assertEq(approvedCount, 1);
 
         multiSigWallet.revoke(txId);
-        assertEq(multiSigWallet.approvedCount(txId), 0);
+        (, , , , uint approvedCount2) = multiSigWallet.transactions(txId);
+        assertEq(approvedCount2, 0);
         vm.stopPrank();
     }
 

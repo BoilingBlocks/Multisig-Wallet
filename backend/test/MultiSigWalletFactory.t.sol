@@ -12,6 +12,7 @@ contract MultiSigWalletFactoryTest is Test {
     }
 
     function testCreate() public {
+        vm.startPrank(address(1));
         uint amountOfOwners = 3;
         address[] memory owners = new address[](amountOfOwners);
         for (uint160 i; i < amountOfOwners; ++i) {
@@ -20,6 +21,7 @@ contract MultiSigWalletFactoryTest is Test {
         uint requiredSignatures = 2;
 
         multiSigWalletFactory.create(owners, requiredSignatures);
+        vm.stopPrank();
 
         for (uint160 i = 1; i <= amountOfOwners; ++i) {
             vm.startPrank(address(i));

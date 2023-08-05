@@ -389,6 +389,14 @@ const App: Component = () => {
                                   </div>
                                   <div class={css(txDetailRow)}>
                                     <div class={css(txDetailLabel)}>
+                                      <p>APPROVALS</p>
+                                    </div>
+                                    <div class={css(txDetailInfo)}>
+                                      <p>{JSON.stringify(transaction[3])}</p>
+                                    </div>
+                                  </div>
+                                  <div class={css(txDetailRow)}>
+                                    <div class={css(txDetailLabel)}>
                                       <p>TO</p>
                                     </div>
                                     <div

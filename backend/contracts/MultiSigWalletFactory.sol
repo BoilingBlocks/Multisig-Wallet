@@ -29,13 +29,13 @@ contract MultiSigWalletFactory {
             _ownerToMultiSigWallets[_owners[i]].push(multiSigWallet);
             walletsCount[_owners[i]] += 1;
 
-            if(_owners[i] == msg.sender) {
-              msgSenderIsAnOwner = true;
+            if (_owners[i] == msg.sender) {
+                msgSenderIsAnOwner = true;
             }
         }
 
         if (!msgSenderIsAnOwner) {
-          revert SenderNotAnOwner();
+            revert SenderNotAnOwner();
         }
 
         emit Create(address(multiSigWallet));

@@ -25,6 +25,7 @@ contract MultiSigWallet {
         uint value;
         bytes data;
         bool executed;
+        uint approvedCount;
     }
 
     address[] public owners;
@@ -33,7 +34,6 @@ contract MultiSigWallet {
 
     Transaction[] public transactions;
     mapping(uint => mapping(address => bool)) public approved;
-    mapping(uint => uint) public approvedCount;
 
     modifier onlyOwner() {
         if (!isOwner[msg.sender]) {
@@ -109,24 +109,25 @@ contract MultiSigWallet {
     }
 
     function submit(address _to, uint _value, bytes calldata _data) external onlyOwner {
-        transactions.push(Transaction({to: _to, value: _value, data: _data, executed: false}));
+        transactions.push(Transaction({to: _to, value: _value, data: _data, executed: false, approvedCount: 0}));
 
         emit Submit(transactions.length - 1);
     }
 
     function approve(uint _txId) external onlyOwner txExists(_txId) notApproved(_txId) notExecuted(_txId) {
         approved[_txId][msg.sender] = true;
-        approvedCount[_txId] += 1;
+        transactions[_txId].approvedCount += 1;
 
         emit Approve(msg.sender, _txId);
     }
 
     function execute(uint _txId) external txExists(_txId) notExecuted(_txId) {
-        if (approvedCount[_txId] < required) {
+        Transaction storage transaction = transactions[_txId];
+
+        if (transaction.approvedCount < required) {
             revert NotEnoughApprovals();
         }
 
-        Transaction storage transaction = transactions[_txId];
         transaction.executed = true;
         (bool ok, ) = transaction.to.call{value: transaction.value}(transaction.data);
 
@@ -139,7 +140,7 @@ contract MultiSigWallet {
 
     function revoke(uint _txId) external txExists(_txId) notExecuted(_txId) isApproved(_txId) {
         approved[_txId][msg.sender] = false;
-        approvedCount[_txId] -= 1;
+        transactions[_txId].approvedCount -= 1;
 
         emit Revoke(msg.sender, _txId);
     }
@@ -149,6 +150,6 @@ contract MultiSigWallet {
     }
 
     function ownersCount() external view returns (uint) {
-      return owners.length;
+        return owners.length;
     }
 }
