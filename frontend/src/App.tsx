@@ -14,6 +14,8 @@ import {
   readContract,
   readContracts,
   fetchBalance,
+  writeContract,
+  waitForTransaction,
 } from "@wagmi/core";
 import { FACTORY_ABI, WALLET_ABI } from "./constants";
 import { CreateWalletModal } from "./CreateWalletModal";
@@ -22,6 +24,14 @@ import { Spinner } from "./Spinner";
 import { CreateTransactionModal } from "./CreateTransactionModal";
 import { hexToString } from "viem";
 import { SystemStyleObject } from "../styled-system/types";
+import {
+  FaSolidCheck,
+  FaSolidCircleXmark,
+  FaSolidEnvelopeCircleCheck,
+  FaSolidThumbsDown,
+  FaSolidThumbsUp,
+} from "solid-icons/fa";
+import toast from "solid-toast";
 
 const setupClient = () => {
   const { chains, publicClient, webSocketPublicClient } = configureChains([hardhat], [publicProvider()]);
@@ -107,7 +117,7 @@ const getTransactions = async (walletAddress: `0x${string}` | undefined) => {
   const data = await readContracts({ contracts: batchedReadCalls });
   const tx = data.filter((el) => el.status === "success"); // Assuming all will succeed. Don't do this at home.
 
-  return tx.map((el) => el.result as [`0x${string}`, BigInt, `0x${string}`, boolean]).reverse();
+  return tx.map((el) => el.result as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt]).reverse();
 };
 
 const getOwners = async (walletAddress: `0x${string}` | undefined) => {
@@ -136,6 +146,58 @@ const getOwners = async (walletAddress: `0x${string}` | undefined) => {
     const data = await readContracts({ contracts: batchedReadCalls });
 
     return data.filter((el) => el.status === "success").map((el) => el.result as `0x${string}`);
+  } catch (e) {
+    return [];
+  }
+};
+
+const getRequiredSigs = async (walletAddress: `0x${string}` | undefined) => {
+  if (walletAddress === undefined) {
+    return undefined;
+  }
+
+  try {
+    return await readContract({
+      address: walletAddress,
+      abi: WALLET_ABI,
+      functionName: "required",
+    });
+  } catch (e) {
+    return undefined;
+  }
+};
+
+const getApprovalStatuses = async ({
+  transactions,
+  selectedWallet: walletAddress,
+  account,
+}: {
+  transactions: [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt][] | undefined;
+  selectedWallet: `0x${string}` | undefined;
+  account: `0x${string}` | undefined;
+}): Promise<boolean[]> => {
+  if (transactions === undefined || walletAddress === undefined || account === undefined) {
+    return [];
+  }
+
+  const transactionsCount = transactions.length;
+
+  if (transactionsCount === 0) {
+    return [];
+  }
+
+  const walletContract = { address: walletAddress, abi: WALLET_ABI };
+
+  const batchedReadCalls = new Array(transactionsCount).fill(0).map((_, i) => ({
+    ...walletContract,
+    functionName: "approved",
+    args: [i, account],
+  }));
+
+  try {
+    const data = await readContracts({ contracts: batchedReadCalls });
+
+    return data.map((el) => el.result as boolean).reverse();
   } catch (e) {
     return [];
   }
@@ -176,12 +238,240 @@ const App: Component = () => {
   const handleCreateTransaction = (to: `0x${string}`, value: BigInt, data: `0x${string}`) => {
     mutateTransactions((prev) => {
       if (prev === undefined) {
-        return [[to, value, data, false]];
+        return [[to, value, data, false, BigInt(0)]];
       }
-      return [[to, value, data, false], ...prev];
+      return [[to, value, data, false, BigInt(0)], ...prev];
     });
 
     refetchTransactions();
+  };
+
+  const handleApproveTx = async (index: number, walletAddress: `0x${string}` | undefined) => {
+    try {
+      if (transactions() === undefined || walletAddress === undefined) {
+        throw new Error();
+      }
+
+      const transactionsMaxIndex = transactions()!.length - 1;
+      const nonreversedIndex = Math.abs(index - transactionsMaxIndex); // ui reverses the indices so newest is on top. unreverse the index before interacting with contract
+      console.log("nonreverse", nonreversedIndex);
+
+      const result = await writeContract({
+        abi: WALLET_ABI,
+        address: walletAddress,
+        functionName: "approve",
+        args: [BigInt(nonreversedIndex)],
+      });
+      await waitForTransaction({ hash: result.hash });
+
+      mutateApprovalStatuses((prev) => {
+        if (prev === undefined) {
+          return prev;
+        }
+
+        return prev.map((el, i) => {
+          if (i === index) {
+            return true;
+          }
+          return el;
+        });
+      });
+
+      mutateTransactions((prev) => {
+        return prev!.map((el, i) => {
+          if (i === index) {
+            return el.map((el2, j) => {
+              if (j === 4 && typeof el2 === "bigint") {
+                return ++el2;
+              }
+
+              return el2;
+            }) as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt];
+          }
+          return el;
+        });
+      });
+      refetchTransactions();
+
+      toast.success(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "#065f46" })}>Transaction Approved</p>
+        </div>,
+        { style: { background: "#d1fae5" } }
+      );
+    } catch (e) {
+      toast.error(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "white" })}>Error</p>
+        </div>,
+        { style: { background: "red" } }
+      );
+    }
+  };
+
+  const handleRevokeTx = async (index: number, walletAddress: `0x${string}` | undefined) => {
+    try {
+      if (transactions() === undefined || walletAddress === undefined) {
+        throw new Error();
+      }
+
+      const transactionsMaxIndex = transactions()!.length - 1;
+      const nonreversedIndex = Math.abs(index - transactionsMaxIndex); // ui reverses the indices so newest is on top. unreverse the index before interacting with contract
+
+      const result = await writeContract({
+        abi: WALLET_ABI,
+        address: walletAddress,
+        functionName: "revoke",
+        args: [BigInt(nonreversedIndex)],
+      });
+      await waitForTransaction({ hash: result.hash });
+
+      mutateApprovalStatuses((prev) => {
+        if (prev === undefined) {
+          return prev;
+        }
+
+        return prev.map((el, i) => {
+          if (i === index) {
+            return false;
+          }
+          return el;
+        });
+      });
+
+      mutateTransactions((prev) => {
+        return prev!.map((el, i) => {
+          if (i === index) {
+            return el.map((el2, j) => {
+              if (j === 4 && typeof el2 === "bigint") {
+                return --el2;
+              }
+
+              return el2;
+            }) as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt];
+          }
+          return el;
+        });
+      });
+      refetchTransactions();
+
+      toast.success(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "#065f46" })}>Transaction Revoked</p>
+        </div>,
+        { style: { background: "#d1fae5" } }
+      );
+    } catch (e) {
+      toast.error(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "white" })}>Error</p>
+        </div>,
+        { style: { background: "red" } }
+      );
+    }
+  };
+
+  const handleExecute = async (index: number, walletAddress: `0x${string}` | undefined) => {
+    try {
+      if (transactions() === undefined || walletAddress === undefined) {
+        throw new Error();
+      }
+
+      const transactionsMaxIndex = transactions()!.length - 1;
+      const nonreversedIndex = Math.abs(index - transactionsMaxIndex);
+
+      const result = await writeContract({
+        abi: WALLET_ABI,
+        address: walletAddress,
+        functionName: "execute",
+        args: [BigInt(nonreversedIndex)],
+      });
+      await waitForTransaction({ hash: result.hash });
+
+      mutateTransactions((prev) => {
+        return prev!.map((el, i) => {
+          if (i === index) {
+            return el.map((el2, j) => {
+              if (j === 3) {
+                return true;
+              }
+
+              return el2;
+            }) as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt];
+          }
+          return el;
+        });
+      });
+      refetchTransactions();
+
+      toast.success(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "#065f46" })}>Transaction Executed</p>
+        </div>,
+        { style: { background: "#d1fae5" } }
+      );
+    } catch (e) {
+      toast.error(
+        <div
+          class={css({
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+          })}
+        >
+          <p class={css({ color: "white" })}>Error</p>
+        </div>,
+        { style: { background: "red" } }
+      );
+    }
   };
 
   const [showCreateWalletModal, setShowCreateWalletModal] = createSignal(false);
@@ -192,8 +482,13 @@ const App: Component = () => {
     selectedWallet,
     getTransactions
   );
+
+  const approvalsDeps = () => ({ selectedWallet: selectedWallet(), transactions: transactions(), account: account() });
+  const [approvalStatuses, { mutate: mutateApprovalStatuses }] = createResource(approvalsDeps, getApprovalStatuses);
+
   const [owners] = createResource(selectedWallet, getOwners);
   const [balance, { /* refetch: refetchBalance,*/ mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
+  const [requiredSigs] = createResource(selectedWallet, getRequiredSigs);
 
   createEffect(() => {
     if (account()) {
@@ -202,25 +497,6 @@ const App: Component = () => {
       mutateWallets(undefined);
     }
   });
-
-  // onMount(() => {
-  //   toast.success(
-  //     <div
-  //       class={css({
-  //         width: "100%",
-  //         height: "100%",
-  //         display: "flex",
-  //         flexDirection: "column",
-  //         justifyContent: "center",
-  //         alignItems: "flex-start",
-  //       })}
-  //     >
-  //       <p class={css({ color: "#065f46" })}>Multisig Wallet Created!</p>
-  //       <p class={css({ color: "#065f46" })}>0x23r23r23rf2-0fjawe-f0awgt4gawg</p>
-  //     </div>,
-  //     { style: { background: "#d1fae5" } }
-  //   );
-  // });
 
   return (
     <>
@@ -350,12 +626,12 @@ const App: Component = () => {
                             {(transaction, i) => (
                               <li
                                 class={css({
-                                  height: "150px",
+                                  height: "200px",
                                   width: "100%",
                                   listStyle: "none",
                                 })}
                               >
-                                <button
+                                <div
                                   class={css({
                                     width: "inherit",
                                     height: "inherit",
@@ -372,19 +648,18 @@ const App: Component = () => {
                                     [css({ borderTopColor: "rose.200", borderTopWidth: "medium" })]: i() === 0,
                                   }}
                                 >
-                                  {/* 
-                                      executed: yes = green / no = yellow,
-                                      approvals: executed = green / not enough approvals = yellow / ready to execute = blue
-                                      to, 
-                                      value, 
-                                      data,
-                                  */}
                                   <div class={css(txDetailRow)}>
                                     <div class={css(txDetailLabel)}>
                                       <p>EXECUTED</p>
                                     </div>
                                     <div class={css(txDetailInfo)}>
-                                      <p>{JSON.stringify(transaction[3])}</p>
+                                      <p class={css({ color: transaction[3] ? "sky.700" : "yellow.700" })}>
+                                        {transaction[3] ? (
+                                          <FaSolidCheck fill="#0369a1" />
+                                        ) : (
+                                          <FaSolidCircleXmark fill="#eab308" />
+                                        )}
+                                      </p>
                                     </div>
                                   </div>
                                   <div class={css(txDetailRow)}>
@@ -392,7 +667,30 @@ const App: Component = () => {
                                       <p>APPROVALS</p>
                                     </div>
                                     <div class={css(txDetailInfo)}>
-                                      <p>{JSON.stringify(transaction[3])}</p>
+                                      <p
+                                        class={css({
+                                          display: "flex",
+                                          fontWeight: "bold",
+                                        })}
+                                        classList={{
+                                          [css({ color: "yellow.600" })]:
+                                            Number(transaction[4]) < Number(requiredSigs()!),
+                                          [css({ color: "sky.700" })]: transaction[3],
+                                          [css({ color: "emerald.700" })]:
+                                            !transaction[3] && Number(transaction[4]) >= Number(requiredSigs()),
+                                        }}
+                                      >
+                                        {transaction[4].toString()} /{"  "}
+                                        <span>
+                                          <Show
+                                            when={requiredSigs() !== undefined}
+                                            fallback={<Spinner width={20} height={20} />}
+                                          >
+                                            &nbsp;
+                                            {requiredSigs()!.toString()}
+                                          </Show>
+                                        </span>
+                                      </p>
                                     </div>
                                   </div>
                                   <div class={css(txDetailRow)}>
@@ -412,7 +710,7 @@ const App: Component = () => {
                                     <div class={css(txDetailLabel)}>
                                       <p>VALUE</p>
                                     </div>
-                                    <div class={css(txDetailInfo)}>{transaction[1].toString()}ETH</div>
+                                    <div class={css(txDetailInfo)}>{transaction[1].toString()}&nbsp;ETH</div>
                                   </div>
                                   <div class={css(txDetailRow)}>
                                     <div class={css(txDetailLabel)}>
@@ -420,7 +718,119 @@ const App: Component = () => {
                                     </div>
                                     <div class={css(txDetailInfo)}>"{hexToString(transaction[2])}"</div>
                                   </div>
-                                </button>
+                                  <div
+                                    class={css({
+                                      width: { base: "85%", mdToXl: "70%" },
+                                      maxWidth: "600px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "space-evenly",
+                                    })}
+                                  >
+                                    <Switch>
+                                      <Match when={transaction[3]}>
+                                        <button
+                                          class={css({
+                                            ...txActionBtn,
+                                            _disabled: {
+                                              backgroundColor: "sky.300",
+                                              borderColor: "sky.400",
+                                              cursor: "not-allowed",
+                                              _active: { transform: "none" },
+                                            },
+                                          })}
+                                          disabled
+                                        >
+                                          <FaSolidEnvelopeCircleCheck fill="#fff" />
+                                          Executed
+                                        </button>
+                                      </Match>
+                                      <Match when={approvalStatuses.loading}>
+                                        <Spinner />
+                                      </Match>
+                                      <Match when={approvalStatuses() !== undefined && approvalStatuses()![i()]}>
+                                        <button
+                                          class={css({
+                                            ...txActionBtn,
+                                            backgroundColor: "yellow.500",
+                                            borderColor: "yellow.700",
+                                            _hover: { backgroundColor: "yellow.600", borderColor: "yellow.800" },
+                                          })}
+                                          onClick={() => handleRevokeTx(i(), selectedWallet())}
+                                        >
+                                          <FaSolidThumbsDown fill="#fff" />
+                                          Revoke
+                                        </button>
+                                        <button
+                                          class={css({
+                                            ...txActionBtn,
+                                            backgroundColor: "sky.400",
+                                            borderColor: "sky.600",
+                                            _hover: { backgroundColor: "sky.600", borderColor: "sky.800" },
+                                            _disabled: {
+                                              backgroundColor: "gray.300",
+                                              borderColor: "gray.400",
+                                              cursor: "not-allowed",
+                                              _hover: {
+                                                backgroundColor: "gray.300",
+                                                borderColor: "gray.400",
+                                                cursor: "not-allowed",
+                                              },
+                                              _active: { transform: "none" },
+                                            },
+                                          })}
+                                          onClick={() => handleExecute(i(), selectedWallet())}
+                                          disabled={
+                                            requiredSigs() !== undefined && Number(transaction[4]) < requiredSigs()!
+                                          }
+                                        >
+                                          <FaSolidEnvelopeCircleCheck fill="#fff" />
+                                          Execute
+                                        </button>
+                                      </Match>
+                                      <Match when={approvalStatuses() !== undefined && !approvalStatuses()![i()]}>
+                                        <button
+                                          class={css({
+                                            ...txActionBtn,
+                                            backgroundColor: "emerald.400",
+                                            borderColor: "emerald.600",
+                                            _hover: { backgroundColor: "emerald.600", borderColor: "emerald.800" },
+                                          })}
+                                          onClick={() => handleApproveTx(i(), selectedWallet())}
+                                        >
+                                          <FaSolidThumbsUp fill="#fff" />
+                                          Approve
+                                        </button>
+                                        <button
+                                          class={css({
+                                            ...txActionBtn,
+                                            backgroundColor: "sky.400",
+                                            borderColor: "sky.600",
+                                            _hover: { backgroundColor: "sky.600", borderColor: "sky.800" },
+                                            _disabled: {
+                                              backgroundColor: "gray.300",
+                                              borderColor: "gray.400",
+                                              cursor: "not-allowed",
+                                              _hover: {
+                                                backgroundColor: "gray.300",
+                                                borderColor: "gray.400",
+                                                cursor: "not-allowed",
+                                              },
+                                              _active: { transform: "none" },
+                                            },
+                                          })}
+                                          onClick={() => handleExecute(i(), selectedWallet())}
+                                          disabled={
+                                            requiredSigs() !== undefined && Number(transaction[4]) < requiredSigs()!
+                                          }
+                                        >
+                                          <FaSolidEnvelopeCircleCheck fill="#fff" />
+                                          Execute
+                                        </button>
+                                      </Match>
+                                    </Switch>
+                                  </div>
+                                </div>
                               </li>
                             )}
                           </For>
@@ -556,4 +966,23 @@ const txDetailInfo: SystemStyleObject = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
+};
+
+const txActionBtn: SystemStyleObject = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-evenly",
+  width: "100px",
+  backgroundColor: "rose.300",
+  borderColor: "rose.600",
+  borderWidth: "thin",
+  color: "white",
+  paddingX: "4",
+  marginY: "2",
+  borderRadius: "md",
+  cursor: "pointer",
+  transition: "all 0.15s ease 0s",
+  _active: {
+    transform: "translateY(4px)",
+  },
 };

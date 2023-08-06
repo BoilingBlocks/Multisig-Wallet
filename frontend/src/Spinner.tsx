@@ -1,8 +1,16 @@
-import { Component } from "solid-js";
+import { Component, mergeProps } from "solid-js";
 
-export const Spinner: Component = () => {
+type Props = {
+  width?: number;
+  height?: number;
+};
+
+export const Spinner: Component<Props> = (props) => {
+  const defaults: Props = { width: 60, height: 60 };
+  const merged = mergeProps(defaults, props);
+
   return (
-    <svg width="60" height="60" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <svg width={`${merged.width}`} height={`${merged.height}`} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <g>
         <circle fill="#FDA4AF" cx="12" cy="2.5" r="1.5" opacity=".14" />
         <circle fill="#FDA4AF" cx="16.75" cy="3.77" r="1.5" opacity=".29" />

@@ -279,25 +279,6 @@ export const WALLET_ABI = [
     inputs: [
       {
         internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    name: "approvedCount",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint256",
         name: "_txId",
         type: "uint256",
       },
@@ -436,6 +417,11 @@ export const WALLET_ABI = [
         internalType: "bool",
         name: "executed",
         type: "bool",
+      },
+      {
+        internalType: "uint256",
+        name: "approvedCount",
+        type: "uint256",
       },
     ],
     stateMutability: "view",
