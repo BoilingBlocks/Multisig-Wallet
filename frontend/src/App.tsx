@@ -2,7 +2,6 @@ import { Component, For, Match, Show, Switch, createEffect, createResource, crea
 import { css } from "../styled-system/css";
 import { Card } from "./Card";
 import { AuthOverlay } from "./AuthOverlay";
-import { publicProvider } from "@wagmi/core/providers/public";
 import { sepolia } from "@wagmi/core/chains";
 import {
   InjectedConnector,
@@ -32,9 +31,13 @@ import {
   FaSolidThumbsUp,
 } from "solid-icons/fa";
 import toast from "solid-toast";
+import { alchemyProvider } from "@wagmi/core/providers/alchemy";
 
 const setupClient = () => {
-  const { chains, publicClient, webSocketPublicClient } = configureChains([sepolia], [publicProvider()]);
+  const { chains, publicClient, webSocketPublicClient } = configureChains(
+    [sepolia],
+    [alchemyProvider({ apiKey: import.meta.env.VITE_ALCHEMY })]
+  );
   createConfig({
     autoConnect: true,
     publicClient,
@@ -56,7 +59,6 @@ const setupClient = () => {
 };
 
 const getWallets = async (account: `0x${string}` | undefined) => {
-  console.log("getting wallet for:", account);
   if (account === undefined) {
     return [];
   }
@@ -73,17 +75,20 @@ const getWallets = async (account: `0x${string}` | undefined) => {
       return [];
     }
 
-    const batchedReadCalls = new Array(Number(walletsCount)).fill(0).map((_, i) => ({
-      ...factoryContract,
-      functionName: "getWallet",
-      args: [i],
-    }));
+    const batchedReadCalls = new Array(Number(walletsCount)).fill(0).map((_, i) =>
+      readContract({
+        ...factoryContract,
+        functionName: "getWallet",
+        args: [BigInt(i)],
+        account: account,
+      })
+    );
 
-    const wallets = await readContracts({ contracts: batchedReadCalls });
-    console.log(wallets.filter((el) => typeof el.result === "string").reverse());
+    const wallets = await Promise.all(batchedReadCalls);
 
-    return wallets.filter((el) => typeof el.result === "string").reverse();
+    return wallets.reverse();
   } catch (e) {
+    console.log(e);
     return [];
   }
 };
@@ -92,8 +97,14 @@ const getBalance = async (walletAddress: `0x${string}`) => {
   return await fetchBalance({ address: walletAddress });
 };
 
-const getTransactions = async (walletAddress: `0x${string}` | undefined) => {
-  if (walletAddress === undefined) {
+const getTransactions = async ({
+  walletAddress,
+  account,
+}: {
+  walletAddress: `0x${string}` | undefined;
+  account: `0x${string}` | undefined;
+}) => {
+  if (walletAddress === undefined || account === undefined) {
     return [];
   }
 
@@ -108,16 +119,21 @@ const getTransactions = async (walletAddress: `0x${string}` | undefined) => {
     return [];
   }
 
-  const batchedReadCalls = new Array(Number(transactionsCount)).fill(0).map((_, i) => ({
-    ...walletContract,
-    functionName: "transactions",
-    args: [i],
-  }));
+  const batchedReadCalls = new Array(Number(transactionsCount)).fill(0).map((_, i) =>
+    readContract({
+      ...walletContract,
+      functionName: "transactions",
+      args: [BigInt(i)],
+      account,
+    })
+  );
 
-  const data = await readContracts({ contracts: batchedReadCalls });
-  const tx = data.filter((el) => el.status === "success"); // Assuming all will succeed. Don't do this at home.
+  // const data = await readContracts({ contracts: batchedReadCalls });
+  const data = await Promise.all(batchedReadCalls);
+  // const tx = data.filter((el) => el.status === "success"); // Assuming all will succeed. Don't do this at home.
 
-  return tx.map((el) => el.result as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt]).reverse();
+  // return tx.map((el) => el.result as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt]).reverse();
+  return data.reverse();
 };
 
 const getOwners = async (walletAddress: `0x${string}` | undefined) => {
@@ -169,13 +185,13 @@ const getRequiredSigs = async (walletAddress: `0x${string}` | undefined) => {
 
 const getApprovalStatuses = async ({
   transactions,
-  selectedWallet: walletAddress,
+  walletAddress,
   account,
 }: {
-  transactions: [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt][] | undefined;
-  selectedWallet: `0x${string}` | undefined;
+  transactions: (readonly [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt])[] | undefined;
+  walletAddress: `0x${string}` | undefined;
   account: `0x${string}` | undefined;
-}): Promise<boolean[]> => {
+}) => {
   if (transactions === undefined || walletAddress === undefined || account === undefined) {
     return [];
   }
@@ -188,16 +204,20 @@ const getApprovalStatuses = async ({
 
   const walletContract = { address: walletAddress, abi: WALLET_ABI };
 
-  const batchedReadCalls = new Array(transactionsCount).fill(0).map((_, i) => ({
-    ...walletContract,
-    functionName: "approved",
-    args: [i, account],
-  }));
+  const batchedReadCalls = new Array(transactionsCount).fill(0).map((_, i) =>
+    readContract({
+      ...walletContract,
+      functionName: "approved",
+      args: [BigInt(i), account],
+      account,
+    })
+  );
 
   try {
-    const data = await readContracts({ contracts: batchedReadCalls });
+    // const data = await readContracts({ contracts: batchedReadCalls });
+    const data = await Promise.all(batchedReadCalls);
 
-    return data.map((el) => el.result as boolean).reverse();
+    return data.reverse();
   } catch (e) {
     return [];
   }
@@ -229,7 +249,7 @@ const App: Component = () => {
           return [];
         }
 
-        return [{ status: "success", result: newWalletAddress }, ...prev];
+        return [newWalletAddress, ...prev];
       });
 
     refetchWallets();
@@ -237,10 +257,11 @@ const App: Component = () => {
 
   const handleCreateTransaction = (to: `0x${string}`, value: BigInt, data: `0x${string}`) => {
     mutateTransactions((prev) => {
+      const newData = [to, value, data, false, BigInt(0)] as const;
       if (prev === undefined) {
-        return [[to, value, data, false, BigInt(0)]];
+        return [newData] as (readonly [`0x${string}`, bigint, `0x${string}`, boolean, bigint])[];
       }
-      return [[to, value, data, false, BigInt(0)], ...prev];
+      return [newData, ...prev] as (readonly [`0x${string}`, bigint, `0x${string}`, boolean, bigint])[];
     });
 
     refetchTransactions();
@@ -280,15 +301,16 @@ const App: Component = () => {
       mutateTransactions((prev) => {
         return prev!.map((el, i) => {
           if (i === index) {
+            // @ts-ignore
             return el.map((el2, j) => {
               if (j === 4 && typeof el2 === "bigint") {
                 return ++el2;
               }
 
               return el2;
-            }) as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt];
+            }) as readonly [`0x${string}`, bigint, `0x${string}`, boolean, bigint];
           }
-          return el;
+          return el as readonly [`0x${string}`, bigint, `0x${string}`, boolean, bigint];
         });
       });
       refetchTransactions();
@@ -360,15 +382,16 @@ const App: Component = () => {
       mutateTransactions((prev) => {
         return prev!.map((el, i) => {
           if (i === index) {
+            // @ts-ignore
             return el.map((el2, j) => {
               if (j === 4 && typeof el2 === "bigint") {
                 return --el2;
               }
 
               return el2;
-            }) as [`0x${string}`, BigInt, `0x${string}`, boolean, BigInt];
+            }) as readonly [`0x${string}`, bigint, `0x${string}`, boolean, bigint];
           }
-          return el;
+          return el as readonly [`0x${string}`, bigint, `0x${string}`, boolean, bigint];
         });
       });
       refetchTransactions();
@@ -424,6 +447,7 @@ const App: Component = () => {
       });
       await waitForTransaction({ hash: result.hash });
 
+      // @ts-ignore
       mutateTransactions((prev) => {
         return prev!.map((el, i) => {
           if (i === index) {
@@ -479,12 +503,14 @@ const App: Component = () => {
   const [selectedWallet, setSelectedWallet] = createSignal<`0x${string}`>();
 
   const [transactions, { refetch: refetchTransactions, mutate: mutateTransactions }] = createResource(
-    selectedWallet,
+    () => ({ walletAddress: selectedWallet(), account: account() }),
     getTransactions
   );
 
-  const approvalsDeps = () => ({ selectedWallet: selectedWallet(), transactions: transactions(), account: account() });
-  const [approvalStatuses, { mutate: mutateApprovalStatuses }] = createResource(approvalsDeps, getApprovalStatuses);
+  const [approvalStatuses, { mutate: mutateApprovalStatuses }] = createResource(
+    () => ({ walletAddress: selectedWallet(), transactions: transactions(), account: account() }),
+    getApprovalStatuses
+  );
 
   const [owners] = createResource(selectedWallet, getOwners);
   const [balance, { /* refetch: refetchBalance,*/ mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
@@ -532,7 +558,7 @@ const App: Component = () => {
                               display: "flex",
                               justifyContent: "center",
                               alignItems: "center",
-                              color: wallet !== undefined && wallet.result === selectedWallet() ? "white" : "rose.600",
+                              color: wallet !== undefined && wallet === selectedWallet() ? "white" : "rose.600",
                               _hover: {
                                 backgroundColor: "rose.200",
                               },
@@ -544,14 +570,14 @@ const App: Component = () => {
                               [css({
                                 backgroundColor: { base: "rose.600", _hover: "rose.600" },
                                 color: "white",
-                              })]: wallet !== undefined && wallet.result === selectedWallet(),
+                              })]: wallet !== undefined && wallet === selectedWallet(),
                             }}
                           >
                             <button
                               class={css({
                                 height: "100%",
                                 width: "100%",
-                                cursor: wallet.result !== selectedWallet() ? "pointer" : "initial",
+                                cursor: wallet !== selectedWallet() ? "pointer" : "initial",
                                 color: "inherit",
                               })}
                               onClick={() =>
@@ -559,11 +585,11 @@ const App: Component = () => {
                                   if (wallet === undefined) {
                                     return prev;
                                   }
-                                  return wallet.result as `0x${string}`;
+                                  return wallet as `0x${string}`;
                                 })
                               }
                             >
-                              <span class={css({ color: "inherit" })}>{wallet.result as `0x${string}`}</span>
+                              <span class={css({ color: "inherit" })}>{wallet as `0x${string}`}</span>
                             </button>
                           </li>
                         )}
