@@ -1,6 +1,7 @@
 export const CARD_TITLE_HEIGHT = "50px";
 
 export const LOCAL_CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+export const SEPOLIA_CONTRACT_ADDRESS = "0xeB82862A5c1937724B53fC2D94e65821Fe014F21";
 export const FACTORY_ABI = [
   {
     inputs: [],

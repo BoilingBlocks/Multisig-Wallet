@@ -1,3 +1,3 @@
-import { LOCAL_CONTRACT_ADDRESS } from "./constants";
+import { SEPOLIA_CONTRACT_ADDRESS } from "./constants";
 
-export const CONTRACT_ADDRESS = LOCAL_CONTRACT_ADDRESS;
+export const CONTRACT_ADDRESS = SEPOLIA_CONTRACT_ADDRESS;

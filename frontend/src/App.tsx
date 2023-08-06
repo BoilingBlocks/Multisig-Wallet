@@ -3,7 +3,7 @@ import { css } from "../styled-system/css";
 import { Card } from "./Card";
 import { AuthOverlay } from "./AuthOverlay";
 import { publicProvider } from "@wagmi/core/providers/public";
-import { hardhat } from "@wagmi/core/chains";
+import { sepolia } from "@wagmi/core/chains";
 import {
   InjectedConnector,
   configureChains,
@@ -34,7 +34,7 @@ import {
 import toast from "solid-toast";
 
 const setupClient = () => {
-  const { chains, publicClient, webSocketPublicClient } = configureChains([hardhat], [publicProvider()]);
+  const { chains, publicClient, webSocketPublicClient } = configureChains([sepolia], [publicProvider()]);
   createConfig({
     autoConnect: true,
     publicClient,
