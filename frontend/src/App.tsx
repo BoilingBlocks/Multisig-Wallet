@@ -21,7 +21,7 @@ import { CreateWalletModal } from "./CreateWalletModal";
 import { CONTRACT_ADDRESS } from "./config";
 import { Spinner } from "./Spinner";
 import { CreateTransactionModal } from "./CreateTransactionModal";
-import { hexToString } from "viem";
+import { formatEther, hexToString } from "viem";
 import { SystemStyleObject } from "../styled-system/types";
 import {
   FaSolidCheck,
@@ -94,7 +94,7 @@ const getWallets = async (account: `0x${string}` | undefined) => {
 };
 
 const getBalance = async (walletAddress: `0x${string}`) => {
-  return await fetchBalance({ address: walletAddress });
+  return await fetchBalance({ address: walletAddress, formatUnits: "ether" });
 };
 
 const getTransactions = async ({
@@ -463,6 +463,7 @@ const App: Component = () => {
         });
       });
       refetchTransactions();
+      refetchBalance();
 
       toast.success(
         <div
@@ -513,7 +514,7 @@ const App: Component = () => {
   );
 
   const [owners] = createResource(selectedWallet, getOwners);
-  const [balance, { /* refetch: refetchBalance,*/ mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
+  const [balance, { refetch: refetchBalance, mutate: mutateBalance }] = createResource(selectedWallet, getBalance);
   const [requiredSigs] = createResource(selectedWallet, getRequiredSigs);
 
   createEffect(() => {
@@ -615,7 +616,7 @@ const App: Component = () => {
                     </Match>
                     <Match when={balance()}>
                       <Card
-                        title={`Balance: ${balance()!.value}ETH`}
+                        title={`Balance: ${balance()!.formatted}ETH`}
                         height="initial"
                         width="100%"
                         lg={{ width: "100%" }}
@@ -736,7 +737,7 @@ const App: Component = () => {
                                     <div class={css(txDetailLabel)}>
                                       <p>VALUE</p>
                                     </div>
-                                    <div class={css(txDetailInfo)}>{transaction[1].toString()}&nbsp;ETH</div>
+                                    <div class={css(txDetailInfo)}>{formatEther(transaction[1])}&nbsp;ETH</div>
                                   </div>
                                   <div class={css(txDetailRow)}>
                                     <div class={css(txDetailLabel)}>

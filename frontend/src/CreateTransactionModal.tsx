@@ -1,7 +1,7 @@
 import { Component, createSignal } from "solid-js";
 import { styles } from "./styles";
 import { css } from "../styled-system/css";
-import { isAddress, toHex } from "viem";
+import { isAddress, parseEther, toHex } from "viem";
 import { waitForTransaction, writeContract } from "@wagmi/core";
 import { WALLET_ABI } from "./constants";
 import toast from "solid-toast";
@@ -14,12 +14,12 @@ type Props = {
 
 export const CreateTransactionModal: Component<Props> = (props) => {
   const [toAddress, setToAddress] = createSignal("");
-  const [value, setValue] = createSignal(BigInt(0));
+  const [value, setValue] = createSignal("0");
   const [data, setData] = createSignal("");
 
   const handleSubmit = async () => {
     const TO = toAddress() as `0x${string}`;
-    const VALUE = value();
+    const VALUE = parseEther(value());
     const DATA = toHex(data());
 
     const { hash } = await writeContract({
@@ -102,7 +102,7 @@ export const CreateTransactionModal: Component<Props> = (props) => {
                   color: "rose.600",
                 })}
                 value={value().toString()}
-                onInput={(e) => setValue(BigInt(e.target.value))}
+                onInput={(e) => setValue(e.target.value)}
                 min={0}
               />
             </div>
